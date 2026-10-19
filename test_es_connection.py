@@ -40,5 +40,8 @@ try:
         print("ID: ", hit["_id"])
         print("Score: ", hit["_score"])
         print("Document: ", hit["_source"])
+
+    mapping = client.indices.get_mapping(index="studies")
+    print("mapping = ", mapping["studies"]["mappings"])
 finally:
     client.close()
