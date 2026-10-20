@@ -7,41 +7,92 @@ client = Elasticsearch("https://localhost:9200",
                        )
 
 try:
-    # create the index if it doesn't already exist
-    if not client.indices.exists(index="studies"):
-        client.indices.create(index="studies")
+    index_name = "studies_v2"
 
-    # store one study document in the index
-    response = client.index(
-        index="studies",
-        id="ST001",
+    # mapping = {
+    #     "properties": {
+    #         "study_id": {"type": "keyword"},
+    #         "title": {"type": "text"},
+    #         "status": {"type": "keyword"},
+    #         "participant_count": {"type": "integer"},
+    #     }
+    # }
+    #
+    # if not client.indices.exists(index=index_name):
+    #     client.indices.create(index=index_name, mappings=mapping)
+    #     print("Created index: ", index_name)
+    # else:
+    #     print("Index already exists: ", index_name)
+    #
+    # index_creation_response = client.indices.get_mapping(index=index_name)
+    # print(index_creation_response[index_name]["mappings"])
+    #
+    client.index(
+        index="studies_v2",
+        id="ST002",
         document={
-            "study_id": "ST001",
-            "title": "Diabetes Treatment Study",
-            "status": "Completed",
-        }
+            "study_id": "ST002",
+            "title": "Diabetes Prevention Study",
+            "status": "In Progress",
+            "participant_count": 120,
+        },
+        refresh="wait_for",
     )
-    # print("Indexing result: ", response["result"])
 
-    document = client.get(index="studies", id="ST001")
-    print("Document ID: ", document["_id"])
-    print("Document source: ", document["_source"])
+    print("Second document indexed")
 
-    search_response = client.search(
-        index="studies",
+    document = client.get(
+        index=index_name,
+        id="ST001",
+    )
+    # print("Document_id = ", document["_id"])
+    # print("Document source = ", document["_source"])
+
+    status_response = client.search(
+        index=index_name,
         query={
-            "match": {
-                "title": "Diabetes"
+            "term": {
+                "status": "Completed"
             }
         },
     )
 
-    for hit in search_response["hits"]["hits"]:
-        print("ID: ", hit["_id"])
-        print("Score: ", hit["_score"])
-        print("Document: ", hit["_source"])
+    text_response = client.search(
+        index=index_name,
+        query={
+            "match": {
+                "title": "diabetes"
+            }
+        },
+    )
 
-    mapping = client.indices.get_mapping(index="studies")
-    print("mapping = ", mapping["studies"]["mappings"])
+    combine_search_response = client.search(
+        index="studies_v2",
+        query={
+            "bool": {
+                "must": [
+                    {
+                        "match": {
+                            "title": "diabetes"
+                        }
+                    }
+                ],
+                "filter": [
+                    {
+                        "term": {
+                            "status": "Completed"
+                        }
+                    }
+                ]
+            }
+        },
+    )
+    # print("Status search matches: ", text_response["hits"]["total"]["value"])
+    # print("Title search matches: ", text_response["hits"]["total"]["value"])
+    print("combine search matches: ", combine_search_response["hits"]["total"]["value"])
+
+    for hit in combine_search_response["hits"]["hits"]:
+        print(hit["_source"])
+
 finally:
     client.close()
