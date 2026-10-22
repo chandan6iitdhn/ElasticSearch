@@ -91,6 +91,37 @@ try:
     # print("Title search matches: ", text_response["hits"]["total"]["value"])
     print("combine search matches: ", combine_search_response["hits"]["total"]["value"])
 
+    response = client.search(
+        index="studies_v2",
+        query={
+            "bool": {
+                "must": [
+                    {
+                        "multi_match":{
+                            "query": "diabetes",
+                            "fields": ["title^3", "description"]
+                        }
+                    }
+                ],
+                "filter": [
+                    {
+                        "term": {"status": "Completed"}
+                    },
+                ],
+                "must_not": [
+                    {
+                        "term": {"is_deleted": True}
+                     }
+                ],
+                "should": [
+                    {
+                        "match": {"title": "treatment"}
+                    }
+                ]
+            }
+        }
+    )
+
     for hit in combine_search_response["hits"]["hits"]:
         print(hit["_source"])
 
