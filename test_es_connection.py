@@ -91,39 +91,53 @@ try:
     # print("Title search matches: ", text_response["hits"]["total"]["value"])
     print("combine search matches: ", combine_search_response["hits"]["total"]["value"])
 
+
+finally:
+    client.close()
+
+
+
+def get_study_status_summary(client, query_text):
     response = client.search(
         index="studies_v2",
+
+        # TODO 1: Return no individual search hits
+        size=0,
+
+        # TODO 2: Match query_text against title
         query={
-            "bool": {
-                "must": [
-                    {
-                        "multi_match":{
-                            "query": "diabetes",
-                            "fields": ["title^3", "description"]
-                        }
+            "match": {"title": query_text}
+        },
+
+        # TODO 3: Group by status
+        aggs={
+            "by_status": {
+                "terms": {
+                    "field": "status"
+                },
+
+                # TODO 4: Calculate average
+                # participants within each status bucket
+                "aggs": {
+                    "avg_participants": {
+                            "avg": {"field": "participant_count"}
                     }
-                ],
-                "filter": [
-                    {
-                        "term": {"status": "Completed"}
-                    },
-                ],
-                "must_not": [
-                    {
-                        "term": {"is_deleted": True}
-                     }
-                ],
-                "should": [
-                    {
-                        "match": {"title": "treatment"}
-                    }
-                ]
+                }
             }
         }
     )
 
-    for hit in combine_search_response["hits"]["hits"]:
-        print(hit["_source"])
+    # TODO 5: Extract buckets
+    buckets = response["aggregations"]["by_status"]["buckets"]
 
-finally:
-    client.close()
+    # TODO 6: Convert buckets to a list of dictionaries
+    results = []
+
+    for bucket in buckets:
+        results.append({
+            "status": bucket["key"],
+            "study_count": bucket["doc_count"],
+            "avg_participants": bucket["avg_participants"]["value"]
+        })
+
+    return results
