@@ -6,138 +6,116 @@ client = Elasticsearch("https://localhost:9200",
                        verify_certs=False, # for local development only
                        )
 
-try:
-    index_name = "studies_v2"
 
-    # mapping = {
-    #     "properties": {
-    #         "study_id": {"type": "keyword"},
-    #         "title": {"type": "text"},
-    #         "status": {"type": "keyword"},
-    #         "participant_count": {"type": "integer"},
-    #     }
-    # }
-    #
-    # if not client.indices.exists(index=index_name):
-    #     client.indices.create(index=index_name, mappings=mapping)
-    #     print("Created index: ", index_name)
-    # else:
-    #     print("Index already exists: ", index_name)
-    #
-    # index_creation_response = client.indices.get_mapping(index=index_name)
-    # print(index_creation_response[index_name]["mappings"])
-    #
-    client.index(
-        index="studies_v2",
-        id="ST002",
-        document={
-            "study_id": "ST002",
-            "title": "Diabetes Prevention Study",
-            "status": "In Progress",
-            "participant_count": 120,
-        },
-        refresh="wait_for",
-    )
+def compare_analyzers(client, input_text):
+    try:
+        analyzers = [
+            "standard",
+            "whitespace",
+            "keyword"
+        ]
 
-    print("Second document indexed")
+        results = {}
 
-    document = client.get(
-        index=index_name,
-        id="ST001",
-    )
-    # print("Document_id = ", document["_id"])
-    # print("Document source = ", document["_source"])
+        for analyzer in analyzers:
+            # TODO 1: Call the Elasticsearch analyze API
+            response = client.indices.analyze(
+                analyzer=analyzer,
+                text=input_text
+            )
 
-    status_response = client.search(
-        index=index_name,
-        query={
-            "term": {
-                "status": "Completed"
-            }
-        },
-    )
+            # TODO 2: Extract tokens from response
+            tokens = []
 
-    text_response = client.search(
-        index=index_name,
-        query={
-            "match": {
-                "title": "diabetes"
-            }
-        },
-    )
+            for item in response["tokens"]:
+                tokens.append(item["token"])
 
-    combine_search_response = client.search(
-        index="studies_v2",
-        query={
-            "bool": {
-                "must": [
-                    {
-                        "match": {
-                            "title": "diabetes"
-                        }
-                    }
-                ],
-                "filter": [
-                    {
-                        "term": {
-                            "status": "Completed"
-                        }
-                    }
-                ]
-            }
-        },
-    )
-    # print("Status search matches: ", text_response["hits"]["total"]["value"])
-    # print("Title search matches: ", text_response["hits"]["total"]["value"])
-    print("combine search matches: ", combine_search_response["hits"]["total"]["value"])
+            # TODO 3: Store tokens under analyzer name
+            results[analyzer] = tokens
 
+        return results
 
-finally:
-    client.close()
+    except Exception as e:
+        raise e
 
+    finally:
+        client.close()
 
+def setup_study_index(client):
 
-def get_study_status_summary(client, query_text):
-    response = client.search(
-        index="studies_v2",
+    index_name = "studies_custom_v2"
 
-        # TODO 1: Return no individual search hits
-        size=0,
+    settings = {
+        "analysis": {
+            "analyzer": {
+                "study_analyzer": {
+                    "type": "custom",
 
-        # TODO 2: Match query_text against title
-        query={
-            "match": {"title": query_text}
-        },
+                    # TODO 1: Configure tokenizer
+                    "tokenizer": "standard",
 
-        # TODO 3: Group by status
-        aggs={
-            "by_status": {
-                "terms": {
-                    "field": "status"
+                    # TODO 2: Configure token filters
+                    "filter": ["lowercase", "english_stop", "english_stemmer"]
+                }
+            },
+            "filter": {
+                "english_stop": {
+                    "type": "stop",
+                    "stopwords": "_english_"
                 },
 
-                # TODO 4: Calculate average
-                # participants within each status bucket
-                "aggs": {
-                    "avg_participants": {
-                            "avg": {"field": "participant_count"}
-                    }
+                "english_stemmer": {
+                    "type": "stemmer",
+                    "language": "english"
                 }
             }
         }
+    }
+
+    mappings = {
+        "properties": {
+            "study_id": {
+                "type": "keyword"
+            },
+            "title": {
+                "type": "text",
+                "analyzer": "study_analyzer"
+            },
+            "status": {
+                "type": "keyword"
+            },
+            "participant_count": {
+                "type": "integer"
+            }
+        }
+    }
+
+    # TODO 6: Create index
+    response = client.indices.create(
+        index=index_name,
+        settings=settings,
+        mappings=mappings
     )
 
-    # TODO 5: Extract buckets
-    buckets = response["aggregations"]["by_status"]["buckets"]
+    return response
 
-    # TODO 6: Convert buckets to a list of dictionaries
-    results = []
 
-    for bucket in buckets:
-        results.append({
-            "status": bucket["key"],
-            "study_count": bucket["doc_count"],
-            "avg_participants": bucket["avg_participants"]["value"]
-        })
+def get_tokens(client):
+    response = client.indices.analyze(
+        index="studies_custom_v2",
+        analyzer="study_analyzer",
+        text="The Diabetes Treatments"
+    )
 
-    return results
+    tokens = [
+        item["token"]
+        for item in response["tokens"]
+    ]
+
+    return tokens
+
+
+# input_text = "Diabetes Treatment Study"
+client.indices.delete(index="studies_custom_v2")
+print(setup_study_index(client))
+print(get_tokens(client))
