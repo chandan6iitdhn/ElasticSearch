@@ -7,115 +7,96 @@ client = Elasticsearch("https://localhost:9200",
                        )
 
 
-def compare_analyzers(client, input_text):
-    try:
-        analyzers = [
-            "standard",
-            "whitespace",
-            "keyword"
-        ]
+def search_studies_by_relevance(client, search_text, status=None):
+    index = "studies_v2"
+    query = {
+            "bool": {
+                "must": [
+                    {
+                        "multi_match": {
+                            "query": search_text,
+                            "fields": ["title^3", "description"]
+                        }
+                    }
+                ],
+                "filter": []
+            }
+        }
+    if status is not None:
+        query["bool"]["filter"].append({"term": {"status": status}})
+    search_resp = client.search(
+        index=index,
+        size=10,
+        explain=True,
+        query=query,
+    )
 
-        results = {}
+    search_resp_hit = search_resp['hits']['hits']
+    resp = []
+    for hit in search_resp_hit:
+        resp.append({
+            "study_id": hit["_source"]['study_id'],
+            "title": hit['_source']['title'],
+            "_score": hit['_score']
+        })
+    return resp
 
-        for analyzer in analyzers:
-            # TODO 1: Call the Elasticsearch analyze API
-            response = client.indices.analyze(
-                analyzer=analyzer,
-                text=input_text
-            )
 
-            # TODO 2: Extract tokens from response
-            tokens = []
-
-            for item in response["tokens"]:
-                tokens.append(item["token"])
-
-            # TODO 3: Store tokens under analyzer name
-            results[analyzer] = tokens
-
-        return results
-
-    except Exception as e:
-        raise e
-
-    finally:
-        client.close()
-
-def setup_study_index(client):
-
-    index_name = "studies_custom_v2"
-
-    settings = {
-        "analysis": {
-            "analyzer": {
-                "study_analyzer": {
-                    "type": "custom",
-
-                    # TODO 1: Configure tokenizer
-                    "tokenizer": "standard",
-
-                    # TODO 2: Configure token filters
-                    "filter": ["lowercase", "english_stop", "english_stemmer"]
-                }
-            },
-            "filter": {
-                "english_stop": {
-                    "type": "stop",
-                    "stopwords": "_english_"
+def advanced_study_search(client, search_text, status=None):
+    query = {
+        "bool": {
+            "should": [
+                {
+                    "match_phrase": {
+                        "title": {
+                            "query": search_text,
+                            "boost": 5
+                        },
+                    }
                 },
-
-                "english_stemmer": {
-                    "type": "stemmer",
-                    "language": "english"
+                {
+                    "match": {
+                        "title": {
+                            "query": search_text,
+                            "operator": "and",
+                            "boost": 2
+                        }
+                    }
+                },
+                {
+                    "match": {
+                        "title": {
+                            "query": search_text,
+                            "fuzziness": "AUTO"
+                        }
+                    }
                 }
-            }
+            ],
+            "minimum_should_match": 1,
         }
     }
 
-    mappings = {
-        "properties": {
-            "study_id": {
-                "type": "keyword"
-            },
-            "title": {
-                "type": "text",
-                "analyzer": "study_analyzer"
-            },
-            "status": {
-                "type": "keyword"
-            },
-            "participant_count": {
-                "type": "integer"
-            }
-        }
-    }
+    if status is not None:
+        query["bool"]["filter"] = [{"term": {"status": status}}]
 
-    # TODO 6: Create index
-    response = client.indices.create(
-        index=index_name,
-        settings=settings,
-        mappings=mappings
+
+    search_result = client.search(
+        index="studies_v2",
+        size=10,
+        explain=True,
+        query=query,
     )
-
-    return response
-
-
-def get_tokens(client):
-    response = client.indices.analyze(
-        index="studies_custom_v2",
-        analyzer="study_analyzer",
-        text="The Diabetes Treatments"
-    )
-
-    tokens = [
-        item["token"]
-        for item in response["tokens"]
-    ]
-
-    return tokens
+    # print(search_result)
+    search_result_hit = search_result['hits']['hits']
+    resp = []
+    for hit in search_result_hit:
+        resp.append({
+            "study_id": hit["_source"]['study_id'],
+            "title": hit['_source']['title'],
+            "_score": hit['_score']
+        })
+    return resp
 
 
-# input_text = "Diabetes Treatment Study"
-client.indices.delete(index="studies_custom_v2")
-print(setup_study_index(client))
-print(get_tokens(client))
+print(advanced_study_search(client, "diabetes", "Completed"))
+# print(search_studies_by_relevance(client, "diabetes", "Completed"))
