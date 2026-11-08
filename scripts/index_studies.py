@@ -31,13 +31,20 @@ def transform_study(row):
 
 def generate_bulk_actions(studies, index_name="studies_v3"):
     for study in studies:
-        document = transform_study(study)
-        yield {
-            "_op_type": "index",
-            "_index": index_name,
-            "_id": document["study_id"],
-            "_source": document
-        }
+        if study.get("is_deleted", False):
+            yield {
+                "_op_type": "delete",
+                "_index": index_name,
+                "_id": study["study_id"]
+            }
+        else:
+            document = transform_study(study)
+            yield {
+                "_op_type": "index",
+                "_index": index_name,
+                "_id": document["study_id"],
+                "_source": document
+            }
 
 
 def create_studies_index(client):
