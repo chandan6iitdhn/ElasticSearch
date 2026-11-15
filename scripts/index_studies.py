@@ -10,7 +10,7 @@ def fetch_studies_in_batches(batch_size=500):
             name="studies_batch_cursor", cursor_factory=RealDictCursor
         ) as cursor:
             cursor.itersize = batch_size
-            cursor.execute("SELECT study_id, title, status, participant_count FROM studies ORDER BY study_id")
+            cursor.execute("SELECT study_id, title, status, participant_count, is_deleted FROM studies ORDER BY study_id")
             while True:
                 rows = cursor.fetchmany(batch_size)
                 if not rows:

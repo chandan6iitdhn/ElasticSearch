@@ -5,6 +5,7 @@ def build_study_query(
 ):
     must = []
     filters = []
+    search_text = (search_text or '').strip()
 
     if search_text:
         must.append({
@@ -60,8 +61,15 @@ def search_studies(
         search_body['sort'] = [
             {sort_by: {'order': order}},
         ]
+        if sort_by != 'study_id':
+            search_body['sort'].append({'study_id': {'order': 'asc'}})
+    else:
+        search_body['sort'] = [
+            {'_score': {'order': 'desc'}},
+            {'study_id': {'order': 'asc'}}
+        ]
 
-    result = client.search(index='studies_v2', body=search_body)
+    result = client.search(index='studies_v3', body=search_body)
 
     total = result['hits']['total']['value']
     return {
